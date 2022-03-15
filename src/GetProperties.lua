@@ -6,6 +6,14 @@ local APIDump = require(script.APIDump)
 
 local API = APIDump.GetLatest()
 
+local function HasProperty(Obj, PropName)
+	local s, _ = pcall(function()
+		local _ = Obj[PropName]
+	end)
+	
+	return s
+end
+
 local function GetClass(ClassName)
 	for _, c in pairs(API.Classes) do
 		if c.Name ~= ClassName then continue end
@@ -33,6 +41,20 @@ local function GetRelevantClasses(ClassName)
 	return RelClasses
 end
 
+local function MemberHasTags(Member, TargetTags)
+	if not Member.Tags then return false end
+
+	for _, Tag in pairs(Member.Tags) do
+		for _, TargetTag in pairs(TargetTags) do
+			if Tag ~= TargetTag then continue end
+			
+			return true
+		end
+	end
+
+	return false
+end
+
 local function GetClassProperties(ClassName)
 	local Props = {}
 	
@@ -41,6 +63,9 @@ local function GetClassProperties(ClassName)
 	
 	for _, m in pairs(Members) do
 		if m.MemberType ~= "Property" then continue end
+		
+		-- Excludes deprecated & read only properties
+		if MemberHasTags(m, { "Deprecated", "ReadOnly" }) then continue end
 		
 		table.insert(Props, m.Name)
 	end
@@ -62,9 +87,33 @@ local function GetAllClassProperties(ClassName)
 	return Props
 end
 
+-- This function excludes properties that are set to their defaults
+local function GetInstanceProperties(Obj)
+	local InsProps = {}
+	
+	local AllProps = GetAllClassProperties(Obj.ClassName)
+	
+	local TempObj = Instance.new(Obj.ClassName)
+	
+	for _, p in pairs(AllProps) do
+		-- Prevents stray errors
+		if not HasProperty(Obj, p) then continue end
+		
+		-- Exclude defaults
+		if Obj[p] == TempObj[p] then continue end
+		
+		InsProps[p] = Obj[p]
+	end
+	
+	TempObj:Destroy()
+	
+	return InsProps
+end
+
 return {
 	GetClass = GetClass,
 	GetRelevantClasses = GetRelevantClasses,
 	GetClassProperties = GetClassProperties,
-	GetAllClassProperties = GetAllClassProperties
+	GetAllClassProperties = GetAllClassProperties,
+	GetInstanceProperties = GetInstanceProperties
 }
